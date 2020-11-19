@@ -1,0 +1,304 @@
+---
+title: "Aplicação do Amostrador de Gibbs à metodologia de captura-recaptura"
+author: |
+  | José H C Monteiro da Silva
+  | **RA 117439**
+  
+date: "MI602 - 2s2020"
+header-includes:
+  - \usepackage{lineno}
+  - \linenumbers
+  - \usepackage{float}
+  - \usepackage{amsmath}
+  - \usepackage{setspace}\doublespacing
+  - \hyphenpenalty = 10000
+
+fontsize: 12pt
+output: pdf_document
+bibliography: biblio.bib
+csl: AStatA.csl
+---
+
+\renewcommand{\figurename}{Figura}
+\renewcommand{\tablename}{Tabela}
+
+```{r setup, include=FALSE}
+rm( list = ls( ) )
+graphics.off( )
+require( FRACTION ); require( numbers ); require( kableExtra )
+require( dplyr ); require( knitr ); require( data.table )
+require( ggplot2 )
+
+hook_chunk = knitr::knit_hooks$get('chunk')
+
+knitr::knit_hooks$set(chunk = function(x, options) {
+  regular_output = hook_chunk(x, options)
+  # add latex commands if chunk option singlespacing is TRUE
+  if (isTRUE(options$singlespacing)) 
+    sprintf("\\singlespacing\n %s \n\\doublespacing", regular_output)
+  else
+    regular_output
+})
+
+knitr::opts_chunk$set( echo = TRUE, 
+                       singlespacing = TRUE,
+                       fig.pos = "!H")
+```
+
+# Introdução
+
+A metodologia de captura-recaptura é uma técnica utilizada inicialmente por Laplace em 1786 para estimar o volume populacional da França e que é amplamente utilizada pela área da Ecologia na estimação de populações de animais [@george_robert1992;@paula_etal2009] e também se aplica em estudos epidemiológicos [@chao_etal2001]. Na ecologia, o princípio básico do método consiste na captura e marcação de animais seguida da soltura em múltiplas amostras de armadilhas ao longo do tempo [@paula_etal2009].
+
+@castledine1981 revisitou a teoria da metodologia de captura-recaptura de modo a acomodar informações a *priori* sobre as populações e probabilidades de recaptura a partir da construção de estimativas Bayesianas. Tais estimativas foram computadas anos depois utilizando o Amostrador de Gibbs por @george_robert1992. 
+
+O presente exercício se concentra na aplicação de métodos de *Monte Carlo Markov Chain*, no caso o Amostrador de Gibbs, para gerar as estimativas Bayesianas formuladas por @castledine1981 e @george_robert1992 para um conjunto de dados de captura-recaptura da espécie *Panthera onca* na região do Parque Nacional da Serra da Capivara no Estado do Piauí. Esse conjunto de dados foi utilizado para gerar estimativas da população da onça na região por @silveira_etal2009 utilizando *softwares* específicos e métodos clássicos da área da Ecologia. Dessa maneira, o objetivo do trabalho é gerar estimativas e intervalos de credibilidade para o tamanho populacional e para as probabilidades de captura dado o conjunto de dados amostrados em @silveira_etal2009, de modo a comparar os resultados e testar a aplicabilidade do método em situações reais de biomas brasileiros.
+
+Esse documento apresenta 3 seções além desta breve introdução. A segunda seção apresenta os dados e os métodos de construção de estimativas. A terceira seção apresenta os resultados. E a quarta seção apresenta uma breve discussão dos resultados obtidos comparando-os com os observados em @silveira_etal2009.
+
+# Dados e Métodos
+
+## Dados
+
+Os dados para aĺicação dos métodos de MCMC para construção de estimativas Bayesianas para o modelo de captura-recaptura foram retirados de @silveira_etal2009. Esse estudo, baseado na região do Parque Nacional Serra da Capivara do Piauí foi conduzido utilizando de armadilhas por câmeras para identificação e amostragem da população de onças pintadas numa área de 524 $km^2$ do parque. A Tabela 1 apresenta os números de indivíduos capturados e recapturados em cada ocasião (armadilha).
+
+
+```{r tab1, echo = F, message = F}
+data_capture <- 
+  data.table(
+    `Ocasião/Armadilha`  = c( 1:14, 'Total'),
+    `Capturas (ni)`      = c( 2, 4, 2, 4, 4, 2, 3, 
+                              4, 2, 3, 5, 10, 2, 5,
+                              52 ),
+    `Recapturas (mi)`    = c( 0, 0, 2, 4, 4, 2, 3, 
+                              2, 2, 3, 5,  6, 2, 5,
+                              42 ) 
+    )
+
+kbl( data_capture, 
+     booktabs = T, 
+     caption = 'Dados da metodologia de captura-recaptura de onças pintadas coletados por Silveira et al., (2009) na ragião do Parque Nacional da Serra da Capivara, Piauí.',
+     position = 'H' ) 
+
+```
+
+## Base Teórica da Estimativa Bayesiana e Pressupostos para a Metodologia de Captura-Recaptura
+
+Neste trabalho, serão adotados os mesmos pressupostos de @george_robert1992, com base no trabalho de @castledine1981. Assim, seja $N$ a população desconhecida de onças pintadas que se deseja estimar, $I$ (igual a 14, no caso) o número de ocasiões (armadilhas) de captura e $p_{ij}$ a probabilidade de captura do indivíduo $j$ na armadilha $i$. Consideram-se ainda os seguintes pressupostos [@castledine1981;@silveira_etal2009]:
+
+* a população amostrada é constante ao longo do experimento e fechada (ou seja, sem eventos de nascimentos, mortes ou migração dentro da área do estudo);
+* inicialmente, nenhum animal está marcado como já capturado;
+* em cada uma das 14 armadilhas, todos os animais tem a mesma probabilidade de serem capturados, independente do seu histórico de capturas, ou seja, $p_{ij} = p_i$.
+
+Define-se ainda $r$ a partir do número de capturas e recapturas:
+
+$$(1) \quad\quad\quad r = \sum_{i=1}^{14} n_i - \sum_{i=1}^{14} m_i = 52 - 40 = 12 $$
+assim, para os pressupostos adotados, a função de verossimilhança $L(N,p|dados)$ do experimento é dada na equação (2), com suporte nos Inteiros não negativos para $N$ e nos Reais no intervalo [0,1] para $p_i$, seguindo @george_robert1992:
+
+$$(2) \quad\quad\quad L(N,p|dados) \propto \dfrac{N!}{(N-r)!}\prod_{i=1}^{14} p_i^{n_i} (1 - p_i)^{N-n_i}.$$
+Assumem-se as *prioris* para $N$ e $p = \{p1,p2,...,p14\}$ como sendo $N \sim Poisson(\lambda)$ com $\lambda = 50$ e $p_i \sim Uniforme(0,1)$, respectivamente.
+
+Assim, a distribuição *posteriori* é dada por 
+
+$$(3) \quad\quad\quad p_i(N,p|dados) \propto L(N,p|dados) * \pi(N) * \prod_{i=1}^{14}\pi(p_i),$$
+
+que assume distribuições independentes para as *prioris* e pode ser obtida via Amostrador de Gibbs encontrando-se as distribuições condicionais completas para $f(N|p,dados)$ e $f(pi|N,p_{k:k\neq i},dados)$. Aplicando as *prioris* definidas anteriormente na *posteriori*, as condicionais assumem seguintes distribuições [@robert_casella2004, pp. 348]:
+
+$$(4) \quad\quad\quad (N - r)|p,dados \sim Poisson( \lambda \prod_{i=1}^{14}( 1 - p_i ) ), $$
+e
+
+$$(5) \quad\quad\quad p_i|N,p_{k:k\neq i },dados \sim Beta( n_i + 1, N - n_i + 1 ). $$
+
+## Estimativas via Amostrador de Gibbs
+
+O Amostrador de Gibbs é uma técnica que permite a obtenção de características (média e variância, por exmeplo) de uma determinada função de densidade marginal $f(x)$ dada uma densidade conjunta $f(x,y_1,y_2,...,y_n)$ a partir da integração $f(x) = \int...\int f(x,y_1,...,y_n)dy_1...dy_n$ [@casella_george1992]. A técnica de amostragem de Gibbs é utilizada para encontrar as características de $f(x)$ em casos onde a integração apresentada é de difícil computo. 
+
+Assim, pode-se obter uma amostra $X_1,X_2,...,X_m \sim f(x)$ partindo de um tamanho de amostra $m$ suficientemente grande e de distribuições condicionais $f(x|y)$ e $f(y|x)$ conhecidas [@casella_george1992]. A partir das distribuições condicionais, obtem-se uma sequência de Gibbs $X_0,Y_0,X_1,Y_1,...$ calculada iterativamente a partir de valores $X_0$ e $Y_0$ especificados.
+
+Seguindo a lógica de @george_robert1992, pode-se implementar um amostrador de Gibbs para obter as distribuições condicionais para $N$ e $p$ do modelo de captura-recaptura $f(N|p,dados)$ e $f(p_i|N,p_{k:k\neq i },dados)$. Para tal, o seguinte algoritmo é adotado: 
+
+1. Gerar estimativas no tempo 0 para $N$ e $p$ a partir das *prioris* definidas: $\hat{N}^0 \sim Poisson(\lambda)$e $\hat{p_i}^0 \sim Uniforme(0,1)$;
+
+2. Simular $\hat{N}^t$ a partir da equação (4) e $\hat{p_i}^{t-1}$;
+
+3. Simular $\hat{p}^t$ a partir da equação (5) e $\hat{N}^{t}$.
+
+Realizando os três passos do algoritmo acima por $t$ vezes suficientemente grandes, tem-se uma corrente de Markov gerada para as variáveis de interesse que convergem para as distriuições de interesse [@casella_george1992]. @casella_george1992 sugerem que o monitoramento da convergência e a partir do momento em que a série gerada tiver convergido, fazer a seleção a partir de intervalos de $k$ passos de modo a evitar problemas de autocorrelação. 
+
+# Resultados
+
+## Amostrador de Gibbs
+
+```{r gibs_sim, echo = FALSE, include = FALSE, message = F}
+# set data matrix with capture-recapture data
+data_capture <- 
+  matrix(
+    data = c( 2, 4, 2, 4, 4, 2, 3, 4, 2, 3, 5, 10, 2, 5,
+              0, 0, 2, 4, 4, 2, 3, 2, 2, 3, 5, 6, 2, 5 ),
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(  c( 'ni', 'mi' ), c( 1:14 ) ) )
+
+# set values for lambda, r, sample size n_samp and I 
+r <- ( data_capture[ 'ni',] - data_capture[ 'mi',] ) %>% sum
+lambda <- 50
+n_samp <- 100000
+I <- 14
+
+set.seed( 123456 )
+
+# set N vector 
+f_N <- numeric( n_samp )
+# set matrix of pis
+f_p <- matrix( nrow = n_samp, ncol = I )
+
+# set priors for N ~ Pois( lambda = 50 )
+f_N[ 1 ] <- 
+  rpois( 1, lambda )
+
+# set priors for pi ~ uniform( 0, 1 )
+f_p[ 1, ] <- 
+  runif( 14, min = 0, max = 1 )
+
+# run sample size n_samp
+for( n in 2:n_samp ){
+
+  # generate f(Ni) from f(pi-1)
+  f_N[ n ] <- 
+    rpois( 1, 
+           lambda = ( lambda * prod( ( 1 - f_p[ n - 1, ] ) ) ) ) + r
+  
+  # generate f(pi) from f(Ni)
+  for( j in 1:14 ){
+    f_p[ n, j ] <-
+      rbeta( 1,
+             shape1 = ( data_capture[ 'ni', j ] + 1 ), 
+             shape2 = ( f_N[ n ] - data_capture[ 'ni', j ] + 1 ) )  
+    
+  }
+    
+}
+
+# create data.table with Gibbs sequence
+res_gibbs <- 
+  cbind(f_N,f_p,0:(100000-1)) %>%
+  as.data.table %>%
+  setnames( c( 'N', paste0( 'p',1:14 ), 't' ) ) %>%
+  melt(
+    id.vars       = c( 't' ),
+    measure.vars  = c( 'N', paste0( 'p',1:14 ) ),
+    value.name    = 'est',
+    variable.name = 'type'
+  )
+
+# create acf data for inspection
+acf_dat <- data.table()
+for( i in unique( res_gibbs$type ) ){
+  aux <- 
+    res_gibbs[ type == i ] 
+  
+  acf_dat <- 
+    rbind(
+      acf_dat,
+      data.table(
+        type = i,
+        acf  = acf( aux$est, plot = F )$acf,
+        lag  = acf( aux$est, plot = F )$lag
+      )
+    )
+}
+
+# confidence interval for autocorrelation
+ciline = qnorm( (1 - 0.95 ) / 2 ) / sqrt(  length( f_N ) )
+```
+
+Foram simuladas 100000 realizações do algoritmo apresentado na seção anterior. A Figura 1 apresenta os resultados das 150 primeiras simulações utilizadas para investigar a convergência das séries geradas. Pelo resultado, fica evidente que a partir de $t=100$ a convergência das estimativas já é observada para $N$.
+
+```{r fig1, fig.align="center", message = FALSE, echo=FALSE, fig.cap="Valores simulados para as estimativas de N e pi para os tempos t entre 0 e 149",fig.width=9, fig.height=5,fig.pos='H',warning = F}
+res_gibbs[ t %in% 0:149 ] %>%
+  ggplot() +
+  geom_line( aes( x = t, 
+                  y = est ),
+             size = 0.75 ) +
+  labs( x = 'Tempo (t)',
+        y = 'Valores gerados\n(Sequência de Gibbs)' ) +
+  facet_wrap( ~ type, scales = 'free_y', nrow = 3 ) +
+  theme_light() +
+  theme( 
+    strip.text = element_text( color = 'black', size = 12 ),
+    axis.title = element_text( color = 'black', size = 13 ),
+    axis.text  = element_text( color = 'black', size = 11 )   
+    )
+```
+
+Após verificação do critério da convergência, olha-se a autocorrelação da sequência de Gibbs gerada. Pela Figura 2, percebe-se que para valores relativamente baixos de $k$ (3 e 5, por exemplo) a autocorrelação entre os valores da série é estatisticamente não significativa a 95\% de confiança. Assim, pode-se selecionar a partir do elemento $t = 100$ valores espaçados a cada 10 passos ($t = \{100, 110, 120, ..., 100000\}$) de modo a obter uma sequência final com estimativas dos parâmetros $N$ e $p$. 
+
+```{r fig2, fig.align="center", message = FALSE, echo=FALSE, fig.cap="Resultados para estimativas de autocorrelação das sequências de Gibbs geradas para N e pi. As linha vermelhas indicam o intervalo de confiança de 0.95 para a ausência de correlação para um determinado lag k.",fig.width=9,fig.height=5,fig.pos='H',warning = F}
+acf_dat[ lag <= 20 & lag > 0 ] %>%
+  ggplot() +
+  geom_segment( aes( x = lag, xend = lag, 
+                     y = 0,   yend = acf ),
+             size = 0.75 ) +
+  geom_point( aes( x = lag,
+                   y = acf ),
+              size = 1 ) +
+  geom_hline( yintercept = ciline,
+              linetype = 'longdash',
+              size = 0.25,
+              color = 'red' ) +
+  geom_hline( yintercept = -ciline,
+              linetype = 'longdash',
+              size = 0.25,
+              color = 'red' ) +
+  scale_x_continuous( limits = c( 0, 20 ) ) +
+  labs( x = 'Lag (k)',
+        y = 'Autocorrelação (ACF)' ) +
+  facet_wrap( ~ type, nrow = 3 ) +
+  theme_light() +
+  theme( 
+    strip.text = element_text( color = 'black', size = 12 ),
+    axis.title = element_text( color = 'black', size = 13 ),
+    axis.text  = element_text( color = 'black', size = 11 )   
+  )
+```
+
+Na Tabela 2, apresentam-se algumas estatísticas para as distribuições geradas. Vê-se que a estimativa da população de onça pintada na região do estudo encontra-se entre 12 e 13 com 95\% de credibilidade. @silveira_etal2009 estimou uma população de 12 onças, valor dentro da estimativa observada via Amostrador de Gibbs.
+
+```{r tab2, echo = F, message = F}
+res_gibbs_final <- 
+  res_gibbs[ t %in% seq( 100, n_samp, 10 ), ]
+
+res_tab <- 
+  res_gibbs_final[ ,
+                 .( `Percentil 0.025` = 
+                      round( quantile( est, probs = 0.025 ), 3 ),
+                    `Percentil 0.975` = 
+                      round( quantile( est, probs = 0.975 ), 3 ),
+                    `Esperança` = round( mean( est ), 3 ),
+                    `Mediana`   = round( median( est ), 3 ) ),
+                 .( `Variável`  = type ) ]
+
+kbl( res_tab, 
+     booktabs = T, 
+     caption = 'Estatísticas a posteriori da estimativa Bayesiana via Amostrador de Gibbs para metodologia de captura-recaptura de onças pintadas coletados por Silveira et al., (2009) na ragião do Parque Nacional da Serra da Capivara, Piauí.',
+     position = 'H' )
+```
+
+
+# Discussão
+
+Este trabalho apresentou a aplicação do Amostrador de Gibbs para estimar a população de onças pintadas no Parque Nacional da Serra da Capivara a partir da metodologia de captura-recaptura [@silveira_etal2009] utilizando da teoria Bayesiana [@castledine1981;@george_robert1992].  
+
+@silveira_etal2009 obteve um resultado de volume populacional de onças na região igual a 12, enquanto que os resultados do trabalho apontam para uma população entre 12 e 13 indivíduos com 95\% de credibilidade. Portanto, os resultados aqui observados para as *prioris* escolhidas e pressupostos adotados foram similares ao resultado obtido pelos modelos clássicos da área apresentados em @silveira_etal2009. 
+
+
+# Referências Bibliográficas 
+
+<div id="refs"></div>
+
+# Agradecimentos
+
+Agradeço à colega Marília Gabriela Rocha pelo suporte durante a realização dessa atividade e, principalmente, pela paciência com as dúvidas elementares.
+
+# Material para Replicação
+
+Os códigos utilizados no presente trabalho encontram-se disponíveis no repositório do **github**: [https://github.com/josehcms/MI602_2s2020](https://github.com/josehcms/MI602_2s2020).
