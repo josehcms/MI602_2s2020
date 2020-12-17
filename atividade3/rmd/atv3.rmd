@@ -11,6 +11,7 @@ header-includes:
   - \usepackage{float}
   - \usepackage{amsmath}
   - \usepackage{setspace}\doublespacing
+  - \usepackage[section]{placeins}
   - \hyphenpenalty = 10000
 
 fontsize: 12pt
@@ -41,14 +42,13 @@ knitr::knit_hooks$set(chunk = function(x, options) {
     regular_output
 })
 
-knitr::opts_chunk$set( echo = TRUE, 
-                       singlespacing = TRUE,
-                       fig.pos = "!H")
+knitr::opts_chunk$set( fig.pos = "!H",
+                       out.extra = "" )
 ```
 
 # 1. Introdução
 
-Este trabalho tem como objetivo estimar parâmetros de um modelo espacialmente autorregressivo (SAR) a partir do método de otimização de Newton-Rapshon. 
+Este trabalho tem como objetivo estimar parâmetros de um modelo espacialmente autorregressivo (SAR) a partir do método de otimização de Newton-Raphson. 
 
 A estratégia metodológica será aplicada aos dados de monitoramento de tiroteios nos bairros do município do Rio de Janeiro coletadas pela plataforma **Fogo Cruzado**^[Para maiores detalhes, consultar [https://fogocruzado.org.br/](https://fogocruzado.org.br/)]. Esse monitoramento é feito a partir do registro de ocorrências de tiroteios pelos próprios moradores utilizando um aplicativo de celular desenvolvido pela plataforma.
 
@@ -58,7 +58,7 @@ Este trabalho apresenta mais 3 seções além desta introdução. Na segunda se�
 
 ## 2.1 Modelo Espacialmente Autorregressivo (SAR)
 
-Para o presente trabalho, considera-se um modelo SAR sem covariáveis, dado por (CITAR):
+Para o presente trabalho, considera-se um modelo SAR [@cressie1993] sem covariáveis, dado por:
 
 $$(1) \quad \quad \quad Y_i - \mu = \rho \sum_{j \in v(i)} (Y_j - \mu) + \epsilon_i, $$
 onde,
@@ -134,7 +134,7 @@ No presente exercício, utilizou-se da função *nlm (Non-Linear Minimization)* 
 
 O mapa da Figura 1 apresenta a disposição espacial da contagem de tireoteios nos bairros do Rio de Janeiro. No período de análise, observou-se uma média de 9.52 tiroteios por bairro da cidade com desvio padrão de 15.03. O maior número de tiroteios no período foi registrado na Cidade de Deus com 101 registros, seguido do Complexo do Alemão com 86 e da Tijuca com 66. Por outro lado, 34 dos 159 bairros analisados não registraram tiroteios, dentre os quais a Gávea, a Lapa e São Conrado. Notadamente, os bairros da Zona Sul e região central da cidade são os que apresentam menores números de registros.
 
-![Número de tiroteios registrados nos bairros do Rio de Janeiro no período analisado. Fonte: Plataforma Fogo Cruzado, 2020.](map1_desc.pdf)
+![Número de tiroteios registrados nos bairros do Rio de Janeiro no período analisado. Fonte: @fogocruzado.](map1_desc.pdf)
 
 ## 3.2 Estratégia de otimização
 
@@ -161,7 +161,9 @@ kable( data_scenarios, format = "latex", booktabs = TRUE,
 
 ```
 
-Na Tabela 2 apresentm-se um conjunto de amostras de resultados obtidos a partir de 10 diferentes critérios de chute inicial. A base completa com as estimativas pode ser acessada em  
+## 3.3 Resultados das Estimativas
+
+Na Tabela 2 apresentm-se um conjunto de amostras de resultados obtidos a partir de 10 diferentes critérios de chute inicial. A base completa com as estimativas pode ser acessada no repositório *Github* deste trabalho, pelo link [https://raw.githubusercontent.com/josehcms/MI602_2s2020/main/atividade3/rmd/estimates_tab.csv](https://raw.githubusercontent.com/josehcms/MI602_2s2020/main/atividade3/rmd/estimates_tab.csv). 
 
 ```{r tab2, echo = F, message = F}
 data_results <- 
@@ -193,14 +195,25 @@ kable( data_results, format = "latex", booktabs = TRUE,
     align = "l", escape = FALSE)
 
 ```
+
+Percebe-se que os resultados são bastante sensíveis aos parâmetros iniciais utilizados como chutes. No caso, valores baixos para os três parâmetros convergiram igualmente para os valores de 9.36 para a média, 14.96 para o desvio-padrão e 0.012 para $\rho$. Assim, essas três estimativas serão utilizadas para a análise gráfica a seguir.
+
+## 3.4 Estimativa de $\hat{Y}$ a partir do modelo SAR construído
+
+Para gerar estimativas para cada bairro a partir dos parâmetros estimados, segue-se a produção de previsões *out-of-sample* tais que $\hat{Y}_i = \mathbf{E}( y_i|y1,...,y_{i-1},...,y_n)$ a partir da matriz $\hat{S} = \hat{\sigma^2} (I - \hat{\rho}A)^{-2}$ construída com os valores estimados dos parâmetros $\sigma^2$ e $\rho$.
+
+O mapa da Figura 2 apresenta os resultados obtidos após estimativa dos parâmetros do modelo SAR com $\hat{\mu} = 9.36$, $\hat{\sigma} = 14.96$ e $\hat{\rho} = 0.012$. Percebe-se que os valores são mais concentrados ao redor da média estimada e, mesmo para os locais com maiores registros de tiroteios, obtêm-se estimativas baixas e menores que 13 tiroteios por bairro, pois o valor do coeficiente de correlação espacial $\rho$ estimado foi próximo de 0. Apesar de não condizer com o observado, o modelo estimado reflete a distribuição espacial observada anteriormente, em que a zona sul da cidade registra um número menor de tiroteios. Ademais, uma maior robustez da estimativa poderia ser obtida a partir do acréscimo de outras variáveis independentes, como por exemplo informações sociodemográficas.
+
+![Número de tiroteios estimados nos bairros do Rio de Janeiro no período analisado. Fonte: @fogocruzado.](map2_res.pdf)
+
 # Referências Bibliográficas 
 
 <div id="refs"></div>
 
 # Agradecimentos
 
-Agradeço à colega Marília Gabriela Rocha pelo suporte durante a realização dessa atividade e, principalmente, pela paciência com as dúvidas elementares.
+Agradeço à colega Marília Gabriela Rocha pelo suporte com os cálculos das derivadas parciais das matrizes. Apesar disso, acabei desistindo de realizar esse exercício manualmente após algumas tentativas e segui para o uso da função *nlm*.
 
 # Material para Replicação
 
-Os códigos utilizados no presente trabalho encontram-se disponíveis no repositório do **github**: [https://github.com/josehcms/MI602_2s2020](https://github.com/josehcms/MI602_2s2020).
+Os códigos utilizados, os resultados, figuras e fontes de dados utilizados no presente trabalho encontram-se disponíveis no repositório do **github**: [https://github.com/josehcms/MI602_2s2020](https://github.com/josehcms/MI602_2s2020).

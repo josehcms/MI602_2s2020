@@ -366,3 +366,80 @@ pdf( file = 'atividade3/rmd/map1_desc.pdf',
 print( map1_desc )
 dev.off()
 ###################################
+
+### Construction of map with estimated pars #------
+
+# Construct smoothed estimates with parameters 
+
+n = nrow( A )
+I = diag( n )
+one <- matrix( 1, ncol = 1, nrow = n ) 
+mu = 9.36
+sigma = 14.96
+rho = 0.012
+Yhat <- numeric( n )
+
+for( i in 1:n ){
+  S <- sigma^2 * matrix.power( ( I - rho * A ), -2 )
+  Yhat[ i ] <- 
+    mu +
+    S[i,-i] %*% 
+    matrix.power( S[-i,-i], -1 ) %*%
+    ( Y[-i] - one[-i] * mu )
+}
+
+# create data.table with Yhat and labels
+atv3_Yhat <- 
+  data.table(
+    neighbcode = paste0( 'B', 1:n ),
+    neighborhood = names(labels),
+    Yhat = Yhat 
+  ) 
+
+
+# merge atv3_Yhat data with shape file
+map2_dt <-
+  rj_sf %>%
+  merge(
+    atv3_Yhat[ , .( neighborhood, Yhat ) ],
+    by.x = 'NOME',
+    by.y = 'neighborhood',
+    all.x = T
+  ) 
+## create plot
+map2_res <- 
+  ggplot() +
+  geom_sf( data = map2_dt,
+           aes( fill = Yhat ),
+           color = 'gray90',
+           size = 0.001 ) +
+  scale_fill_gradient(  low = 'steelblue',
+                        high = 'tomato3',
+                        name = 'Tiroteios\nEstimados (SAR)' ) +
+  labs( title = '',
+        subtitle = '',
+        x = '',
+        y = '' ) +
+  theme_bw() +
+  theme(
+    legend.position = 'bottom',
+    strip.background = element_rect( color = 'black',
+                                     fill = 'gray90' ),
+    strip.text = element_text( size = 15, color = 'black' ),
+    legend.text = element_text( size = 12, color = 'black' ),
+    legend.title = element_text( size = 13, color = 'black' ),
+    axis.ticks = element_blank(),
+    axis.text = element_text( size = 10, color = 'black' ),
+    plot.title = element_text( size = 17, color = 'black', 
+                               face = 'bold' ),
+    plot.subtitle = element_text( size = 16, color = 'black' ),
+    plot.caption = element_text( size = 13, color = 'black', 
+                                 hjust = 0 )
+  )
+
+### save descriptive map1
+pdf( file = 'atividade3/rmd/map2_res.pdf',
+     height = 5, width = 7 )
+print( map2_res )
+dev.off()
+###################################
