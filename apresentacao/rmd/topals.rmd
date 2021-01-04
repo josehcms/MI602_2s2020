@@ -179,4 +179,14 @@ População Exposta ($N_x$): Censo Demográfico 2010 (IBGE)
 
 * Ferramenta importante para estudos demográficos mais desagregados ou em países com fontes de informações de baixa qualidade
 
+## Códigos e Replicação
+
+Da apresentação e dos exemplos utilizados:
+
+* https://github.com/josehcms/MI602_2s2020
+
+Do variante do método TOPALS proposta por @gonzaga_schmertmann2016 e @schmertmann2018:
+
+* https://github.com/schmert/TOPALS
+
 ## Bibliografia {.allowframebreaks} 
